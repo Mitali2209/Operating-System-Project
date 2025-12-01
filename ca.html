@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Deadlock Defender: Full Control</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0b0d1a, #1a1f36, #0e1122);
+      color: #e0f7ff;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 15px;
+      width: 100%;
+      max-width: 1300px;
+    }
+
+    h1 {
+      font-size: 2.1rem;
+      text-shadow: 0 0 10px rgba(0, 200, 255, 0.7);
+      margin-bottom: 10px;
+    }
+
+    .status {
+      text-align: center;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 16px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      max-width: 1000px;
+      font-size: 1rem;
+    }
+
+    .main-wrapper {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      width: 100%;
+      max-width: 1300px;
+    }
+
+    .simulation-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #canvas {
+      width: 850px;
+      height: 600px;
+      background: rgba(8, 12, 30, 0.6);
+      border-radius: 14px;
+      position: relative;
+      box-shadow: 0 0 25px rgba(0, 150, 255, 0.4);
+      overflow: hidden;
+      cursor: default;
+    }
+
+    #control-panel {
+      width: 260px;
+      background: rgba(15, 20, 40, 0.85);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 0 20px rgba(0, 100, 255, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-size: 1.4rem;
+      color: #4da6ff;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    button {
+      padding: 12px 16px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.25s ease;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+      width: 100%;
+      text-align: center;
+    }
+
+    #addProcBtn { background: linear-gradient(to right, #4da6ff, #0077ff); color: white; }
+    #addResBtn { background: linear-gradient(to right, #ff6b6b, #d32f2f); color: white; }
+    #detectBtn { background: linear-gradient(to right, #00c853, #00796b); color: white; }
+    #recoverBtn { background: linear-gradient(to right, #ff9800, #e65100); color: white; }
+    #togglePreventBtn { background: linear-gradient(to right, #7e57c2, #4527a0); color: white; }
+    #resetBtn { background: linear-gradient(to right, #9c27b0, #6a1b9a); color: white; }
+
+    button:hover { transform: translateX(4px); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .legend {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.85rem;
+    }
+
+    .legend div {
+      margin: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .legend .proc { background: #4da6ff; }
+    .legend .res { background: #ff6b6b; }
+    .legend .deadlock { background: #ff3366; }
+    .legend .alloc { background: #00ffcc; height: 4px; width: 20px; }
+    .legend .req { background: #ff5252; height: 4px; width: 20px; }
+
+    .node {
+      position: absolute;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+      text-align: center;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+    }
+
+    .process {
+      width: 60px;
+      height: 60px;
+      background: #4da6ff;
+      color: white;
+    }
+
+    .resource {
+      width: 55px;
+      height: 55px;
+      background: #ff6b6b;
+      color: white;
+      font-size: 0.85rem;
+      line-height: 1.2;
+    }
+
+    .edge {
+      position: absolute;
+      height: 3px;
+      background: #00ffcc;
+      transform-origin: left center;
+      z-index: -1;
+      cursor: pointer;
+    }
+
+    .request-edge { background: #ff5252 !important; }
+
+    .deadlocked-process {
+      animation: pulseRed 1.8s infinite;
+      background: #ff3366 !important;
+      color: white !important;
+    }
+
+    .deadlocked-resource {
+      animation: pulseRed 1.8s infinite;
+      background: #ff0033 !important;
+      color: white !important;
+      border: 2px solid #ff0000;
+    }
+
+    .deadlock-edge { background: #ff0000 !important; height: 4px !important; }
+
+    @keyframes pulseRed {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 0, 50, 0.8); }
+      50% { box-shadow: 0 0 0 15px rgba(255, 0, 50, 0); }
+    }
+
+    .preview {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border: 2px dashed white;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0.7;
+    }
+
+    /* CONTEXT MENU */
+    #context-menu {
+      position: absolute;
+      background: rgba(30, 35, 60, 0.95);
+      border: 1px solid #4da6ff;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      z-index: 200;
+      display: none;
+      flex-direction: column;
+      padding: 6px 0;
+    }
+
+    .context-item {
+      padding: 8px 20px;
+      color: white;
+      cursor: pointer;
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
+
+    .context-item:hover {
+      background: rgba(77, 166, 255, 0.3);
+    }
+
+    /* MODAL */
+    #explanation-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background: rgba(20, 25, 50, 0.95);
+      border-radius: 16px;
+      padding: 25px;
+      width: 90%;
+      max-width: 700px;
+      box-shadow: 0 0 30px rgba(255, 0, 50, 0.6);
+      border: 1px solid #ff3366;
+    }
+
+    .modal-header {
+      color: #ff5555;
+      font-size: 1.5rem;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .modal-body {
+      color: #f0f8ff;
+      line-height: 1.6;
+      font-size: 1.05rem;
+      white-space: pre-wrap;
+    }
+
+    .modal-footer {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    #closeModal {
+      padding: 10px 25px;
+      background: linear-gradient(to right, #ff3366, #d32f2f);
+      color: white;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔒 Deadlock Defender: Full Control</h1>
+    <div class="status" id="status">Right-click any element to delete it!</div>
+  </div>
+
+  <div class="main-wrapper">
+    <div class="simulation-area">
+      <div id="canvas"></div>
+    </div>
+
+    <div id="control-panel">
+      <div class="panel-title">Control Panel</div>
+      <button id="addProcBtn">➕ Add Process</button>
+      <button id="addResBtn">➕ Add Resource</button>
+      <button id="detectBtn">🔍 Detect Deadlock</button>
+      <button id="recoverBtn">💥 Recover</button>
+      <button id="togglePreventBtn">🛡️ Prevention: OFF</button>
+      <button id="resetBtn">🗑️ Clear All</button>
+
+      <div class="legend">
+        <div><span class="legend-color proc"></span> Process</div>
+        <div><span class="legend-color res"></span> Resource</div>
+        <div><span class="legend-color deadlock"></span> 🔴 Deadlock</div>
+        <div><span class="legend-color alloc"></span> Allocation</div>
+        <div><span class="legend-color req"></span> Request (Shift+Click)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTEXT MENU -->
+  <div id="context-menu">
+    <div class="context-item" id="delete-node">🗑️ Delete This Element</div>
+    <div class="context-item" id="delete-edge">🗑️ Delete This Connection</div>
+  </div>
+
+  <!-- EXPLANATION MODAL -->
+  <div id="explanation-modal">
+    <div class="modal-content">
+      <div class="modal-header">💀 DEADLOCK DETECTED!</div>
+      <div class="modal-body" id="explanation-text"></div>
+      <div class="modal-footer">
+        <button id="closeModal">Close & Recover</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === STATE ===
+    let processes = [];
+    let resources = [];
+    let allocations = [];
+    let requests = [];
+    let deadlockedProcesses = new Set();
+    let deadlockedResources = new Set();
+    let preventionEnabled = false;
+    let selectedProcess = null;
+    let procCounter = 0;
+    let resCounter = 0;
+    let pendingAdd = null;
+    let previewEl = null;
+    let draggedNode = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let contextTarget = null;
+
+    const canvas = document.getElementById('canvas');
+    const statusEl = document.getElementById('status');
+    const contextMenu = document.getElementById('context-menu');
+    const deleteNodeBtn = document.getElementById('delete-node');
+    const deleteEdgeBtn = document.getElementById('delete-edge');
+    const explanationModal = document.getElementById('explanation-modal');
+    const explanationText = document.getElementById('explanation-text');
+    const CANVAS_WIDTH = 850;
+    const CANVAS_HEIGHT = 600;
+
+    // === UTILS ===
+    function getId(prefix) {
+      return `${prefix}${prefix === 'P' ? procCounter++ : resCounter++}`;
+    }
+
+    function getResource(rId) {
+      return resources.find(r => r.id === rId);
+    }
+
+    function isAvailable(rId) {
+      const r = getResource(rId);
+      const allocated = allocations.filter(a => a.rId === rId).length;
+      return r && allocated < r.instances;
+    }
+
+    function updateStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    // === DELETE FUNCTIONS ===
+    function deleteProcess(pId) {
+      processes = processes.filter(p => p.id !== pId);
+      allocations = allocations.filter(a => a.pId !== pId);
+      requests = requests.filter(r => r.pId !== pId);
+      if (selectedProcess === pId) selectedProcess = null;
+      updateStatus(`🗑️ Deleted process ${pId}`);
+      render();
+      setTimeout(() => checkForDeadlock(false), 300);
+    }
+
+    function deleteResource(rId) {
+      resources = resources.filter(r => r.id !== rId);
+      allocations = allocations.filter(a => a.rId !== rId);
+      requests = requests.filter(r => r.rId !== rId);
+      updateStatus(`🗑️ Deleted resource ${rId}`);
+      render();
+      setTimeout(() => checkForDeadlock(false), 300);
+    }
+
+    function deleteConnection(pId, rId) {
+      allocations = allocations.filter(a => !(a.pId === pId && a.rId === rId));
+      requests = requests.filter(r => !(r.pId === pId && r.rId === rId));
+      updateStatus(`🗑️ Deleted connection: ${pId} ↔ ${rId}`);
+      render();
+      setTimeout(() => checkForDeadlock(false), 300);
+    }
+
+    // === CONTEXT MENU ===
+    function showContextMenu(x, y, type, data) {
+      contextTarget = { type, data };
+      contextMenu.style.left = `${x}px`;
+      contextMenu.style.top = `${y}px`;
+
+      if (type === 'node') {
+        deleteNodeBtn.style.display = 'block';
+        deleteEdgeBtn.style.display = 'none';
+      } else if (type === 'edge') {
+        deleteNodeBtn.style.display = 'none';
+        deleteEdgeBtn.style.display = 'block';
+      }
+
+      contextMenu.style.display = 'flex';
+
+      setTimeout(() => {
+        document.addEventListener('click', hideContextMenu);
+      }, 100);
+    }
+
+    function hideContextMenu() {
+      contextMenu.style.display = 'none';
+      contextTarget = null;
+      document.removeEventListener('click', hideContextMenu);
+    }
+
+    deleteNodeBtn.onclick = () => {
+      if (contextTarget?.type === 'node') {
+        if (contextTarget.data.type === 'process') {
+          deleteProcess(contextTarget.data.id);
+        } else {
+          deleteResource(contextTarget.data.id);
+        }
+      }
+      hideContextMenu();
+    };
+
+    deleteEdgeBtn.onclick = () => {
+      if (contextTarget?.type === 'edge') {
+        deleteConnection(contextTarget.data.pId, contextTarget.data.rId);
+      }
+      hideContextMenu();
+    };
+
+    // === PLACEMENT & DRAG ===
+    function enterPlacementMode(type) {
+      pendingAdd = type;
+      canvas.style.cursor = 'crosshair';
+      updateStatus(`Click on canvas to place a new ${type}.`);
+      canvas.addEventListener('mousemove', showPreview);
+      canvas.addEventListener('click', placeNode);
+    }
+
+    function showPreview(e) {
+      const rect = canvas.getBoundingClientRect();
+      const size = pendingAdd === 'resource' ? 27 : 30;
+      const x = e.clientX - rect.left - size;
+      const y = e.clientY - rect.top - size;
+      if (previewEl) previewEl.remove();
+      previewEl = document.createElement('div');
+      previewEl.className = 'preview';
+      previewEl.style.left = `${x}px`;
+      previewEl.style.top = `${y}px`;
+      if (pendingAdd === 'resource') {
+        previewEl.style.width = '55px';
+        previewEl.style.height = '55px';
+        previewEl.style.border = '2px dashed #ff6b6b';
+      }
+      canvas.appendChild(previewEl);
+    }
+
+    function placeNode(e) {
+      if (!pendingAdd) return;
+      const rect = canvas.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      let y = e.clientY - rect.top;
+      x = Math.max(30, Math.min(CANVAS_WIDTH - 30, x));
+      y = Math.max(30, Math.min(CANVAS_HEIGHT - 30, y));
+
+      if (pendingAdd === 'process') {
+        const id = getId('P');
+        processes.push({ id, x, y });
+        updateStatus(`✅ Placed ${id}`);
+      } else {
+        const id = getId('R');
+        resources.push({ id, x, y, instances: 1 });
+        updateStatus(`✅ Placed ${id}`);
+      }
+      exitPlacementMode();
+      render();
+    }
+
+    function exitPlacementMode() {
+      pendingAdd = null;
+      canvas.style.cursor = 'default';
+      if (previewEl) previewEl.remove();
+      previewEl = null;
+      canvas.removeEventListener('mousemove', showPreview);
+      canvas.removeEventListener('click', placeNode);
+    }
+
+    function makeDraggable(el, node, isProcess) {
+      el.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return; // skip right-click
+        if (pendingAdd) return;
+        e.stopPropagation();
+        draggedNode = { el, node, isProcess };
+        const rect = el.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+        dragOffsetX = e.clientX - rect.left;
+        dragOffsetY = e.clientY - rect.top;
+        canvas.style.cursor = 'grabbing';
+        el.style.zIndex = '10';
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('mouseup', dragEnd);
+      });
+
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        showContextMenu(
+          e.clientX,
+          e.clientY,
+          'node',
+          { id: node.id, type: isProcess ? 'process' : 'resource' }
+        );
+      });
+    }
+
+    function dragMove(e) {
+      if (!draggedNode) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      let x = e.clientX - canvasRect.left - dragOffsetX;
+      let y = e.clientY - canvasRect.top - dragOffsetY;
+      x = Math.max(30, Math.min(CANVAS_WIDTH - 30, x));
+      y = Math.max(30, Math.min(CANVAS_HEIGHT - 30, y));
+      draggedNode.node.x = x;
+      draggedNode.node.y = y;
+      render();
+    }
+
+    function dragEnd() {
+      if (draggedNode) {
+        draggedNode.el.style.zIndex = '';
+        draggedNode = null;
+        canvas.style.cursor = 'default';
+      }
+      document.removeEventListener('mousemove', dragMove);
+      document.removeEventListener('mouseup', dragEnd);
+    }
+
+    // === CORE LOGIC ===
+    function createEdge(pId, rId, isRequest = false) {
+      if (preventionEnabled && isRequest) {
+        const orderedRes = [...resources].sort((a, b) => a.id.localeCompare(b.id)).map(r => r.id);
+        const held = allocations.filter(a => a.pId === pId).map(a => a.rId);
+        const maxHeldIndex = held.length > 0 ? Math.max(...held.map(id => orderedRes.indexOf(id))) : -1;
+        const newResIndex = orderedRes.indexOf(rId);
+        if (newResIndex <= maxHeldIndex) {
+          updateStatus(`🛡️ Prevention blocked: ${pId} can't request ${rId}.`);
+          return false;
+        }
+      }
+
+      if (isRequest) {
+        if (!requests.some(req => req.pId === pId && req.rId === rId)) {
+          requests.push({ pId, rId });
+          updateStatus(`⏳ ${pId} → REQUEST → ${rId}`);
+        }
+      } else {
+        if (isAvailable(rId)) {
+          allocations.push({ pId, rId });
+          updateStatus(`✅ ${pId} → ALLOCATED → ${rId}`);
+        } else {
+          if (!requests.some(req => req.pId === pId && req.rId === rId)) {
+            requests.push({ pId, rId });
+          }
+          updateStatus(`⚠️ ${rId} busy → request queued.`);
+        }
+      }
+      render();
+      setTimeout(() => checkForDeadlock(true), 300);
+      return true;
+    }
+
+    function checkForDeadlock(showToast = true) {
+      deadlockedProcesses = new Set();
+      deadlockedResources = new Set();
+
+      const wfGraph = {};
+      const heldBy = {};
+      const waitingFor = {};
+
+      processes.forEach(p => {
+        wfGraph[p.id] = new Set();
+        waitingFor[p.id] = [];
+      });
+
+      allocations.forEach(a => {
+        heldBy[a.rId] = a.pId;
+      });
+
+      requests.forEach(req => {
+        waitingFor[req.pId].push(req.rId);
+        const holder = heldBy[req.rId];
+        if (holder && holder !== req.pId) {
+          wfGraph[req.pId].add(holder);
+        }
+      });
+
+      const visited = new Set();
+      const recStack = new Set();
+      const inCycle = new Set();
+
+      function dfs(node) {
+        visited.add(node);
+        recStack.add(node);
+        for (const neighbor of wfGraph[node] || []) {
+          if (!visited.has(neighbor)) {
+            if (dfs(neighbor)) {
+              inCycle.add(node);
+              return true;
+            }
+          } else if (recStack.has(neighbor)) {
+            inCycle.add(node);
+            inCycle.add(neighbor);
+            return true;
+          }
+        }
+        recStack.delete(node);
+        return false;
+      }
+
+      for (const p of processes) {
+        if (!visited.has(p.id)) dfs(p.id);
+      }
+
+      deadlockedProcesses = inCycle;
+
+      if (deadlockedProcesses.size === 0) {
+        if (showToast) updateStatus("✅ No deadlock detected.");
+        render();
+        return false;
+      }
+
+      deadlockedProcesses.forEach(pId => {
+        allocations.filter(a => a.pId === pId).forEach(a => deadlockedResources.add(a.rId));
+        (waitingFor[pId] || []).forEach(rId => deadlockedResources.add(rId));
+      });
+
+      const cycle = Array.from(deadlockedProcesses);
+      let msg = "🔴 DEADLOCK:\n";
+      cycle.forEach(p => {
+        const held = allocations.filter(a => a.pId === p).map(a => a.rId).join(', ') || 'none';
+        const waits = waitingFor[p].join(', ') || 'none';
+        msg += `\n• ${p} holds [${held}], waits for [${waits}]`;
+      });
+      msg += "\n\n💡 Circular wait detected!";
+      explanationText.textContent = msg;
+      explanationModal.style.display = 'flex';
+      render();
+      return true;
+    }
+
+    function recover() {
+      if (deadlockedProcesses.size === 0) {
+        updateStatus("ℹ️ No deadlock to recover.");
+        return;
+      }
+      const victim = Array.from(deadlockedProcesses)[0];
+      allocations = allocations.filter(a => a.pId !== victim);
+      requests = requests.filter(r => r.pId !== victim);
+      deadlockedProcesses = new Set();
+      deadlockedResources = new Set();
+      render();
+      for (let i = requests.length - 1; i >= 0; i--) {
+        const req = requests[i];
+        if (isAvailable(req.rId)) {
+          allocations.push({ pId: req.pId, rId: req.rId });
+          requests.splice(i, 1);
+        }
+      }
+      setTimeout(() => {
+        updateStatus(`✅ Recovered by terminating ${victim}.`);
+        checkForDeadlock(false);
+      }, 600);
+    }
+
+    // === RENDER ===
+    function render() {
+      canvas.innerHTML = '';
+      if (previewEl) canvas.appendChild(previewEl);
+
+      [...allocations, ...requests].forEach(link => {
+        const p = processes.find(pr => pr.id === link.pId);
+        const r = resources.find(rs => rs.id === link.rId);
+        if (!p || !r) return;
+
+        const dx = r.x - p.x;
+        const dy = r.y - p.y;
+        const len = Math.sqrt(dx*dx + dy*dy);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+        const edge = document.createElement('div');
+        edge.className = 'edge';
+        if (requests.some(req => req.pId === link.pId && req.rId === link.rId)) {
+          edge.classList.add('request-edge');
+        }
+        if (deadlockedProcesses.has(link.pId) && deadlockedResources.has(link.rId)) {
+          edge.classList.add('deadlock-edge');
+        }
+        edge.style.width = `${len}px`;
+        edge.style.left = `${p.x}px`;
+        edge.style.top = `${p.y}px`;
+        edge.style.transform = `rotate(${angle}deg)`;
+
+        edge.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showContextMenu(e.clientX, e.clientY, 'edge', { pId: link.pId, rId: link.rId });
+        });
+
+        canvas.appendChild(edge);
+      });
+
+      resources.forEach(res => {
+        const el = document.createElement('div');
+        el.className = 'node resource';
+        const used = allocations.filter(a => a.rId === res.id).length;
+        el.innerHTML = `${res.id}<br>(${used}/${res.instances})`;
+        el.style.left = `${res.x - 27}px`;
+        el.style.top = `${res.y - 27}px`;
+        if (deadlockedResources.has(res.id)) {
+          el.classList.add('deadlocked-resource');
+        }
+        el.addEventListener('click', (e) => {
+          if (selectedProcess && !draggedNode) {
+            createEdge(selectedProcess, res.id, e.shiftKey);
+            selectedProcess = null;
+            render();
+          }
+        });
+        makeDraggable(el, res, false);
+        canvas.appendChild(el);
+      });
+
+      processes.forEach(proc => {
+        const el = document.createElement('div');
+        el.className = 'node process';
+        el.textContent = proc.id;
+        el.style.left = `${proc.x - 30}px`;
+        el.style.top = `${proc.y - 30}px`;
+        if (deadlockedProcesses.has(proc.id)) {
+          el.classList.add('deadlocked-process');
+        }
+        if (selectedProcess === proc.id && !deadlockedProcesses.has(proc.id)) {
+          el.style.boxShadow = '0 0 0 3px #ffff00';
+        }
+        el.addEventListener('click', (e) => {
+          if (draggedNode) return;
+          e.stopPropagation();
+          selectedProcess = proc.id;
+          render();
+          updateStatus(`Selected ${proc.id}. Click resource. Hold SHIFT for REQUEST.`);
+        });
+        makeDraggable(el, proc, true);
+        canvas.appendChild(el);
+      });
+
+      const handleBgClick = (e) => {
+        if (e.target === canvas && !pendingAdd && !draggedNode) {
+          selectedProcess = null;
+          render();
+          updateStatus("Click a process, then a resource. Hold Shift for request.");
+        }
+        canvas.removeEventListener('click', handleBgClick);
+      };
+      if (!pendingAdd && !draggedNode) {
+        canvas.addEventListener('click', handleBgClick);
+      }
+    }
+
+    // === EVENTS ===
+    document.getElementById('addProcBtn').addEventListener('click', () => {
+      exitPlacementMode();
+      enterPlacementMode('process');
+    });
+
+    document.getElementById('addResBtn').addEventListener('click', () => {
+      exitPlacementMode();
+      enterPlacementMode('resource');
+    });
+
+    document.getElementById('detectBtn').addEventListener('click', () => {
+      checkForDeadlock(true);
+    });
+
+    document.getElementById('recoverBtn').addEventListener('click', recover);
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      exitPlacementMode();
+      draggedNode = null;
+      processes = [];
+      resources = [];
+      allocations = [];
+      requests = [];
+      deadlockedProcesses = new Set();
+      deadlockedResources = new Set();
+      preventionEnabled = false;
+      selectedProcess = null;
+      procCounter = 0;
+      resCounter = 0;
+      document.getElementById('togglePreventBtn').textContent = "🛡️ Prevention: OFF";
+      explanationModal.style.display = 'none';
+      updateStatus("✅ Simulation cleared.");
+      render();
+    });
+
+    document.getElementById('togglePreventBtn').addEventListener('click', () => {
+      preventionEnabled = !preventionEnabled;
+      document.getElementById('togglePreventBtn').textContent = 
+        `🛡️ Prevention: ${preventionEnabled ? 'ON' : 'OFF'}`;
+      updateStatus(`Prevention ${preventionEnabled ? 'enabled' : 'disabled'}.`);
+    });
+
+    document.getElementById('closeModal').addEventListener('click', () => {
+      explanationModal.style.display = 'none';
+      recover();
+    });
+
+    // Start with classic deadlock example
+    processes = [{ id: 'P0', x: 250, y: 200 }, { id: 'P1', x: 550, y: 200 }];
+    resources = [{ id: 'R0', x: 300, y: 400, instances: 1 }, { id: 'R1', x: 500, y: 400, instances: 1 }];
+    allocations = [{ pId: 'P0', rId: 'R0' }, { pId: 'P1', rId: 'R1' }];
+    requests = [{ pId: 'P0', rId: 'R1' }, { pId: 'P1', rId: 'R0' }];
+    procCounter = 2;
+    resCounter = 2;
+    updateStatus("✅ Ready! Right-click any element to delete.");
+    render();
+  </script>
+</body>
+</html>
